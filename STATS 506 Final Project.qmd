@@ -1,0 +1,121 @@
+---
+title: "STATS 506 Final Project"
+author: "Calder Moore"
+format: pdf
+editor: visual
+---
+
+## Cleaning
+
+Interested in the RURALURBAN and the FUNDING catgeoricals. Need to deal with the weights too. I think the survey pacakage can help with this.
+
+This Pew Research page has an example doing some regression in R with weighted survey data. Could be a nice reference.
+
+https://www.pewresearch.org/decoded/2019/01/15/a-short-intro-to-linear-regression-analysis-using-survey-data/
+
+```{r}
+non <- read.csv("nonprofit-survey-spring-2021-puf.csv")
+
+# Create variable for proportion of funding from each source for each nonprofit
+
+# Only want funding for year 2021
+
+# Use FINANCES3_1_1 - FINANCES3-8-1 to create variables for proportion of funding from each source, then look at both linear regression and beta regression if (0,1) or fractional logistic regression (quasibinomial) if [0,1] depending on how the variables look
+
+# Need to deal with the -99 entries for non response. Turn to NA? I think more justifiable than turning into 0 since -99 means the org saw the question and chose not to answer, so it's possible they have a funding source for that entry but didn't care to share it
+
+non$Finances_3_1_1[non$Finances_3_1_1 == -99] <- NA
+non$Finances_3_2_1[non$Finances_3_2_1 == -99] <- NA
+non$Finances_3_3_1[non$Finances_3_3_1 == -99] <- NA
+non$Finances_3_4_1[non$Finances_3_4_1 == -99] <- NA
+non$Finances_3_5_1[non$Finances_3_5_1 == -99] <- NA
+non$Finances_3_6_1[non$Finances_3_6_1 == -99] <- NA
+non$Finances_3_7_1[non$Finances_3_7_1 == -99] <- NA
+non$Finances_3_8_1[non$Finances_3_8_1 == -99] <- NA
+
+# To clean RuralUrban_1, does it makes sense to turn -99 to 0 even though I didn't do it for the finance variables? I think I have to since there are only two levels anyways
+
+non$RuralUrban_1[non$RuralUrban_1 == -99] <- 0
+non$RuralUrban_2[non$RuralUrban_2 == -99] <- 0
+non$RuralUrban_3[non$RuralUrban_3 == -99] <- 0
+non$RuralUrban_4[non$RuralUrban_4 == -99] <- 0
+
+# Create the funding variables as proportions of total funding
+
+non$FundPropGovAg <- non$Finances_3_1_1 / rowSums(non[, 188:195], na.rm = TRUE)
+non$FundPropSelfPay <- non$Finances_3_2_1 / rowSums(non[, 188:195], na.rm = TRUE)
+non$FundPropGov3Party <- non$Finances_3_3_1 / rowSums(non[, 188:195], na.rm = TRUE)
+non$FundPropIndDon <- non$Finances_3_4_1 / rowSums(non[, 188:195], na.rm = TRUE)
+non$FundPropGift <- non$Finances_3_5_1 / rowSums(non[, 188:195], na.rm = TRUE)
+non$FundPropFound <- non$Finances_3_6_1 / rowSums(non[, 188:195], na.rm = TRUE)
+non$FundPropCorp <- non$Finances_3_7_1 / rowSums(non[, 188:195], na.rm = TRUE)
+non$FundPropOther <- non$Finances_3_8_1 / rowSums(non[, 188:195], na.rm = TRUE)
+
+# Create some other variables to be covariates. Number of staff (STAFF_3_1_1), include the dummies for expenses (SIZESTRATA), groups targeted (PROGDEM_1 - PROGDEM_21). Size could also be approximated by the number of people served (PEOPLESERVED). That's probably enough for covariates. Probably choose either staff or expenses (SIZESTRATA) since there's probably pretty high colinearity there. I think go with staff since it's the most correlated with FundPropGovAg.
+
+# The PROGDEM variables have a 0, 1, 2 levels for don't serve group (0), this is a primary group we serve (1), and this is a secondary group we serve (2), so either group the 1 and 2 together as a yes/no thing or make two dummies, one for primary groups and one for secondary. I think I prefer the first option since the distinction between primary and secondary groups probably isn't huge, and it's largely meant to be a control anyways.
+
+# Clean staff
+
+non$Staff_3_1_1[non$Staff_3_1_1 == -99] <- NA
+non$Staff_3_2_1[non$Staff_3_2_1 == -99] <- NA
+non$Staff_3_3_1[non$Staff_3_3_1 == -99] <- NA
+non$Staff_3_4_1[non$Staff_3_4_1 == -99] <- NA
+non$Staff_3_5_1[non$Staff_3_5_1 == -99] <- NA
+non$Staff_3_6_1[non$Staff_3_6_1 == -99] <- NA
+non$Staff_3_7_1[non$Staff_3_7_1 == -99] <- NA
+
+non$TotalStaff <- rowSums(non[, 94:100], na.rm = TRUE)
+
+# Clean groups served 
+
+for (i in 1:21) {
+  varname <- paste0("ProgDem_", i)
+
+  non[[varname]][non[[varname]] == -99 | non[[varname]] == 99] <- NA
+
+  non[[varname]][non[[varname]] == 2] <- 1
+}
+
+```
+
+
+
+```{r}
+
+# Quasibinomial since we have [0,1]. Will need to use svyglm() from survey package with family = quasibinomial(link = "logit") to account for the weights in the data
+
+library(survey)
+
+# Survey design
+design <- svydesign(
+  ids = ~1,
+  weights = ~weight_complete_partials,   # Use complete partials to include every nonprofit
+  data = non
+)
+
+# Quasibinomial regression. Do one for each funding proportion. Baseline categorical predictor is "Other"
+modGovAg <- svyglm(
+  FundPropGovAg ~ RuralUrban_1 + RuralUrban_2 + RuralUrban_3 +
+                  TotalStaff + ProgDem_2 + ProgDem_3 + ProgDem_4 + ProgDem_5 + ProgDem_6 + ProgDem_7 + ProgDem_8 + ProgDem_9 + ProgDem_10 + ProgDem_11 + ProgDem_12 + ProgDem_13 + ProgDem_14 + ProgDem_15 + ProgDem_16 + ProgDem_17 + ProgDem_18 + ProgDem_19 + ProgDem_20 + ProgDem_21,
+  design = design,
+  family = quasibinomial(link = "logit")
+)
+
+summary(modGovAg)
+
+
+# For robust standard errors
+
+library(sandwich)
+library(lmtest)
+
+# Default robust SEs
+summary(modGovAg)
+
+# Or explicitly extract
+coef(modGovAg)
+sqrt(diag(vcov(modGovAg)))
+
+```
+
