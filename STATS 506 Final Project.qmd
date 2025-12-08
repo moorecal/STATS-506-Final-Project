@@ -65,6 +65,8 @@ non$Staff_3_5_1[non$Staff_3_5_1 == -99] <- NA
 non$Staff_3_6_1[non$Staff_3_6_1 == -99] <- NA
 non$Staff_3_7_1[non$Staff_3_7_1 == -99] <- NA
 
+# Combine all forms of staff into one Total Staff variable just to approximate organization size.
+
 non$TotalStaff <- rowSums(non[, 94:100], na.rm = TRUE)
 
 # Clean groups served 
@@ -79,7 +81,7 @@ for (i in 1:21) {
 
 ```
 
-
+## Modeling
 
 ```{r}
 
@@ -97,25 +99,85 @@ design <- svydesign(
 # Quasibinomial regression. Do one for each funding proportion. Baseline categorical predictor is "Other"
 modGovAg <- svyglm(
   FundPropGovAg ~ RuralUrban_1 + RuralUrban_2 + RuralUrban_3 +
-                  TotalStaff + ProgDem_2 + ProgDem_3 + ProgDem_4 + ProgDem_5 + ProgDem_6 + ProgDem_7 + ProgDem_8 + ProgDem_9 + ProgDem_10 + ProgDem_11 + ProgDem_12 + ProgDem_13 + ProgDem_14 + ProgDem_15 + ProgDem_16 + ProgDem_17 + ProgDem_18 + ProgDem_19 + ProgDem_20 + ProgDem_21,
+                  TotalStaff + ProgDem_1 + ProgDem_2 + ProgDem_3 + ProgDem_4 + ProgDem_5 + ProgDem_6 + ProgDem_7 + ProgDem_8 + ProgDem_9 + ProgDem_10 + ProgDem_11 + ProgDem_12 + ProgDem_13 + ProgDem_14 + ProgDem_15 + ProgDem_16 + ProgDem_17 + ProgDem_18 + ProgDem_19 + ProgDem_20 + ProgDem_21,
   design = design,
   family = quasibinomial(link = "logit")
 )
 
 summary(modGovAg)
 
+library(car)
 
-# For robust standard errors
+vif(modGovAg)
 
-library(sandwich)
-library(lmtest)
+# High VIF for many of the variables. Removing ProgDem variables brings it down considerably, so that they are all under 10.
 
-# Default robust SEs
-summary(modGovAg)
+modGovAg2 <- svyglm(
+  FundPropGovAg ~ RuralUrban_1 +
+                  TotalStaff + ProgDem_1 + ProgDem_2 + ProgDem_4 + ProgDem_5 + ProgDem_6 + ProgDem_7 + ProgDem_8 + ProgDem_9 + ProgDem_10 + ProgDem_12 + ProgDem_13 + ProgDem_15 + ProgDem_16 + ProgDem_19 + ProgDem_20 + ProgDem_21,
+  design = design,
+  family = quasibinomial(link = "logit")
+)
 
-# Or explicitly extract
-coef(modGovAg)
-sqrt(diag(vcov(modGovAg)))
+vif(modGovAg2)
+
+summary(modGovAg2)
 
 ```
+
+## Export
+
+```{r}
+
+# Export for use in report
+
+# Want histogram to justify use of quasibinomial regression
+
+hist(non$FundPropGovAg, main = "Histogram of Proportion of Funding from a Government Agency", xlab = "Proportion of Funding from a Government Agency")
+
+png("histogram.png", width=800, height=600)
+hist(non$FundPropGovAg, main="Histogram of FundPropGovAg", xlab="FundPropGovAg")
+dev.off()
+
+# Export 
+
+library(modelsummary)
+
+modelsummary(
+  modGovAg2,
+  output = "model_table.tex",
+  stars = TRUE,
+  fmt = 3,
+  gof_omit = ".*",
+  escape = FALSE
+)
+
+# Create a table of summary stats for our variables
+
+vars <- c("FundPropGovAg", "RuralUrban_1", "TotalStaff",
+          "ProgDem_1", "ProgDem_2", "ProgDem_3", "ProgDem_4",
+          "ProgDem_5", "ProgDem_6", "ProgDem_7", "ProgDem_8",
+          "ProgDem_9", "ProgDem_10", "ProgDem_11", "ProgDem_12",
+          "ProgDem_13", "ProgDem_14", "ProgDem_15", "ProgDem_16")
+
+sumstats <- non[, vars]
+
+
+
+
+library(stargazer)
+
+stargazer(sumstats,
+          type = "latex",       
+          summary = TRUE,       
+          out = "summary.tex")  
+
+
+```
+
+
+
+
+
+
 
