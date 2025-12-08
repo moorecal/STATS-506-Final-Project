@@ -110,7 +110,7 @@ library(car)
 
 vif(modGovAg)
 
-# High VIF for many of the variables. Removing ProgDem variables brings it down considerably, so that they are all under 10.
+# High VIF for many of the variables. Removing ProgDem variables in order of highest VIF brings it down considerably, so that they are all under 10. Removed ProgDem 3, 11, 14, 17, and 18.
 
 modGovAg2 <- svyglm(
   FundPropGovAg ~ RuralUrban_1 +
